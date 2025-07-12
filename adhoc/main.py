@@ -1017,13 +1017,14 @@ def main(
     plotting=True,
     save_summary=True,
     frame_range=(100, 200),
-    num_viz_frames=10
+    num_viz_frames=10,
+    output_dir='outputs'
     ):
     
     if not os.path.exists(video_path):
         raise FileNotFoundError(f"Video file not found: {video_path}")
     
-    output_dir = os.path.join('outputs', os.path.basename(video_path).split('.')[0])
+    output_dir = os.path.join(output_dir, os.path.basename(video_path).split('.')[0])
     os.makedirs(output_dir, exist_ok=True)
     
     if task_type == 'facial' and os.path.exists(os.path.join(output_dir, 'facial_landmarks.csv')):
@@ -1124,9 +1125,10 @@ def main(
 def meta_run(
     video_path='/scratch2/MIR_LAB/seungbeen/Study2',
     start_idx=0,
-    output_dir='outputs',
+    output_dir='/scratch2/iyy1112/outputs',
     chunk_size=2,
-    task_type='facial'
+    just_number_check=False,
+    task_type='pose'
 ):
     raw_video_paths = sorted(glob.glob(os.path.join(video_path, '*.m2ts')))
     todo_list = []
@@ -1142,7 +1144,11 @@ def meta_run(
             print(f"Processing {video_file}...") 
             todo_list.append(video_file)
             
+    print(f"Remaining {len(todo_list)} videos...")
+    if just_number_check:
+        return
     todo_list = todo_list[start_idx:start_idx+chunk_size if chunk_size else None]
+    
     for video_file in todo_list:
         try:
             main(
@@ -1152,7 +1158,8 @@ def meta_run(
                 plotting=True,
                 save_summary=True,
                 frame_range=(0, 10),
-                num_viz_frames=10
+                num_viz_frames=10,
+                output_dir=output_dir
             )
         except Exception as e:
             logger.error(f"Failed to process {video_file}: {e}")
@@ -1163,4 +1170,3 @@ if __name__ == '__main__':
     fire.Fire(meta_run)
     
     
- 
