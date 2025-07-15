@@ -25,6 +25,7 @@ A comprehensive and robust video loading and analysis system designed to handle 
 
 1. **Install Dependencies**:
 ```bash
+pip install -e .
 pip install -r requirements.txt
 ```
 

@@ -3,12 +3,13 @@ import time
 import glob
 from counseleval.src.analysis import analyze_prosody, analyze_facial_expressions, analyze_gestures_posture
 from counseleval.src.load import RobustVideoLoader, logger
+from tqdm import tqdm
 
 # Import from separated modules
 from visualize import (
     create_prosody_plot, create_facial_plot, create_pose_plot,
-    create_facial_landmarks_frame, create_pose_landmarks_frame,
-    create_nonverbal_cues_plot, load_and_plot_summary
+    create_nonverbal_cues_plot, load_and_plot_summary,
+    create_facial_landmarks_frame, create_pose_landmarks_frame
 )
 from figuring_out import (
     analyze_nonverbal_cues_facial, analyze_nonverbal_cues_pose, analyze_nonverbal_cues_prosody,
@@ -21,18 +22,21 @@ TASK_CONFIG = {
         'analyze_func': analyze_prosody,
         'plot_func': create_prosody_plot,
         'cues_func': analyze_nonverbal_cues_prosody,
+        'frame_save_func': None,
         'output_file': 'prosody_features.csv'
     },
     'facial': {
         'analyze_func': analyze_facial_expressions,
         'plot_func': create_facial_plot,
         'cues_func': analyze_nonverbal_cues_facial,
+        'frame_save_func': create_facial_landmarks_frame,
         'output_file': 'facial_landmarks.csv'
     },
     'pose': {
         'analyze_func': analyze_gestures_posture,
         'plot_func': create_pose_plot,
         'cues_func': analyze_nonverbal_cues_pose,
+        'frame_save_func': create_pose_landmarks_frame,
         'output_file': 'pose_landmarks.csv'
     }
 }
@@ -42,6 +46,7 @@ def main(
     task_type='facial', # prosody, facial, pose
     visualize=True,
     plotting=True,
+    frame_save=False,
     save_summary=True,
     frame_range=(100, 200),
     num_viz_frames=10,
@@ -69,10 +74,15 @@ def main(
         if plotting and cues_data:
             plot_path = create_nonverbal_cues_plot(cues_data, task_type, output_dir)
             logger.info(f"Nonverbal cues plot: {plot_path}")
+            
+        if frame_save:
+            frame_save_func = config['frame_save_func']
+            if frame_save_func is not None:
+                frame_save_func(video_path, existing_file, output_dir=output_dir)
         
         return {'nonverbal_cues_path': cues_path, 'nonverbal_cues_data': cues_data}
     
-    # Load video and get info
+    
     loader = RobustVideoLoader(video_path)
     video_info = loader.get_video_info()
     
@@ -125,18 +135,18 @@ def main(
 def meta_run(
     video_path='/scratch2/MIR_LAB/seungbeen/Study2',
     start_idx=0,
+    remaining=True,
     output_dir='/scratch2/iyy1112/outputs',
-    chunk_size=2,
+    chunk_size=50,
+    frame_save=False,
     just_number_check=False,
-    task_type='pose'
+    task_type='pose' # prosody, facial, pose
 ):
     raw_video_paths = sorted(glob.glob(os.path.join(video_path, '*.m2ts')))
     todo_list = []
     done = 0
     
-    # Get expected output file from config
     expected_file = TASK_CONFIG[task_type]['output_file']
-    
     for video_file in raw_video_paths:
         video_name = os.path.basename(video_file).split('.')[0]
         if os.path.exists(os.path.join(output_dir, video_name, expected_file)):
@@ -150,15 +160,20 @@ def meta_run(
     print(f"Remaining {len(todo_list)} videos...")
     if just_number_check:
         return
-    todo_list = todo_list[start_idx:start_idx+chunk_size if chunk_size else None]
     
-    for video_file in todo_list:
+    if remaining:
+        todo_list = todo_list[start_idx:start_idx+chunk_size if chunk_size else None]
+    else:
+        todo_list = raw_video_paths[start_idx:start_idx+chunk_size if chunk_size else None]
+    
+    for video_file in tqdm(todo_list):
         try:
             main(
                 video_path=video_file, 
                 task_type=task_type, 
                 visualize=True,
                 plotting=True,
+                frame_save=frame_save,
                 save_summary=True,
                 frame_range=(0, 10),
                 num_viz_frames=10,
