@@ -1,110 +1,78 @@
-# Audio Alignment and Synchronized Analysis
+## Counseling-Quality Assessment Pipeline
 
-This document explains how to use the new audio alignment features added to the counseling quality analysis system.
+### 1. Raw Inputs & Pre-processing
+| Modality | Source File(s) | Key Output CSV | Important Columns | Frame Rate |
+|----------|----------------|----------------|-------------------|------------|
+| **Facial Video** | `<session>_T.m2ts`, `<session>_C.m2ts` | `facial_landmarks.csv` | `x_* / y_*` (468 pts), `AUxx_intensity` | native FPS |
+| **Body Pose** | same videos | `pose_landmarks.csv` | `<joint>_x / _y / _visibility` (33 joints) | native FPS |
+| **Prosody (Audio)** | same videos | `prosody_features.csv` | `F0_sma`, `pcm_intensity_sma`, spectral centroid … | 100 Hz |
 
-## Features Added
+### 2. Feature Extraction Logic
+#### Facial
+* **AU Statistics** – mean intensity & activation-frequency (`>0.5`).
+* **Face Movement** – Δdistance of face-centre per frame.
+* **Landmark Stability** – std of x,y across time.
 
-1. **Audio Alignment Caching**: Save alignment time offsets for each client-counselor pair to avoid re-computing alignment every time.
-2. **Synchronized CSV Export**: Apply saved alignment data to CSV files for separate analysis.
-3. **Separate Timeline Visualizations**: Create visualizations comparing client and counselor timelines separately.
-4. **Alignment Comparison**: Visualize the difference between aligned and unaligned data.
+#### Pose
+| Metric | Formula | Interpretation |
+|--------|---------|----------------|
+| **Movement / frame** | `Σ_j |p_t − p_{t-1}|` | Kinetic energy |
+| **Key-joint activity** | mean(|x_t-x_{t-1}|) for nose & wrists & shoulders | Gesture emphasis |
+| **Visibility reliability** | mean(visibility) | Tracking quality |
 
-## Usage
+#### Prosody
+* Energy variability (`pcm_intensity_sma` std)
+* Pitch statistics (mean, range, std of `F0_sma`)
+* Spectral centroid dynamics.
 
-### 1. First-time Audio Alignment Analysis
+### 3. Therapist–Client Synchrony
+| Modality | Paired Signals | Synchrony Score |
+|----------|---------------|-----------------|
+| Facial | common AU vectors | mean Pearson r |
+| Pose | frame-wise movement vectors | Pearson r |
+| Prosody | F0, energy, spectral | mean Pearson r |
 
-Run this to compute and save audio alignment data for all pairs:
+`synchrony > 0.3` ⇒ in-sync frame (used for synchrony ratio).
 
+### 4. Higher-level Indicators
+* **Engagement Level** – mean activity (T & C).
+* **Rapport** – mean modality synchrony.
+* **Emotional Regulation** – inverse variability.
+* **Non-verbal Communication** – AU diversity · gesture amplitude · vocal activity.
+
+### 5. Dashboard Visuals (CounselingAssessmentVisualizer)
+1. Progress bar overall score.
+2. Radar chart (4 core competencies).
+3. Detailed bar chart.
+4. Counselor frame image (pose/facial).
+5. **Face Emotion Flow**  
+   • 100 uniformly-sampled frames (0-50 min)  
+   • Therapist solid line (0–1)  
+   • Client dashed line shifted +0.55 (0.55–1.55)  
+   • Colour = dominant emotion per frame.
+6. Additional sub-plots: Pose/AU/Prosody details, Engagement timeline, Recommendations.
+
+### 6. Tool Chain
+* **OpenFace 2.0** – AU & landmarks.
+* **MediaPipe Pose** – 2-D body joints.
+* **openSMILE / librosa** – prosody descriptors.
+* **audalign** – audio fingerprint alignment.
+* **pandas · numpy · matplotlib · seaborn** – analytics & plotting.
+* **fire · tqdm** – CLI & progress bars.
+
+> **Thresholds**  
+> • Active AU = intensity > 0.5  
+> • Visible joint = visibility > 0.5  
+> • High movement = session 75-percentile.
+
+Execution:
 ```bash
-python consolidated_analysis.py --mode alignment
-```
+# 1) Align audio timelines + comparison plots
+python adhoc/consolidated_analysis.py --mode alignment
 
-This will:
-- Perform audio alignment using the `audalign` library
-- Save alignment offsets to `audio_alignment_cache.json` 
-- Create timeline visualizations for each pair
-- Generate alignment comparison plots
+# 2) Produce per-pair JSON + consolidated PNG
+python adhoc/consolidated_analysis.py --mode consolidated
 
-### 2. Synchronized Analysis (Using Cached Alignment)
-
-After running alignment analysis, use the cached data:
-
-```bash
-python consolidated_analysis.py --mode synchronized
-```
-
-This will:
-- Load previously computed alignment offsets from cache
-- Apply alignment to CSV data files
-- Save synchronized CSV files for client and counselor separately
-- Create visualizations of the synchronized data
-
-### 3. Force Re-alignment
-
-If you want to recompute alignment (ignoring cache):
-
-```bash
-python consolidated_analysis.py --mode alignment --force_realign
-```
-
-### 4. Custom Output Directories
-
-Specify custom output directories:
-
-```bash
-python consolidated_analysis.py --mode alignment --output_dir /path/to/custom/output
-```
-
-## Output Files
-
-### Alignment Analysis Mode
-- `audio_alignment_cache.json`: Contains offset data for each pair
-- `{pair_name}_separate_timelines_{task_type}.png`: Timeline visualizations
-- `{pair_name}_alignment_comparison_{task_type}.png`: Before/after alignment comparison
-- `alignment_analysis_summary.json`: Summary of all results
-
-### Synchronized Analysis Mode
-- `{task_type}_client_synchronized.csv`: Synchronized client data
-- `{task_type}_counselor_synchronized.csv`: Synchronized counselor data
-- `{pair_name}_sync_separate_timelines_{task_type}.png`: Synchronized timeline visualizations
-- `synchronized_analysis_summary.json`: Summary of all synchronized results
-
-## API Usage
-
-You can also use the functions directly in your code:
-
-```python
-from consolidated_analysis import CounselingQualityAnalyzer
-
-# Initialize analyzer
-analyzer = CounselingQualityAnalyzer('/path/to/outputs')
-
-# Get saved alignment for a pair
-offset = analyzer.get_saved_alignment(client_dir, counselor_dir)
-
-# Apply alignment to CSV data
-client_sync, counselor_sync = analyzer.apply_alignment_to_csv(
-    client_df, counselor_df, offset
-)
-
-# Create visualizations
-viz_path = analyzer.visualize_separate_timelines(
-    client_data, counselor_data, output_dir, pair_name
-)
-```
-
-## Benefits
-
-1. **Efficiency**: Compute alignment once, reuse many times
-2. **Consistency**: Same alignment applied across all analyses
-3. **Flexibility**: Separate CSV files for independent analysis
-4. **Visualization**: Clear comparison of aligned vs unaligned data
-5. **Debugging**: Easy to inspect and verify alignment quality
-
-## Task Types Supported
-
-- `facial`: Facial expression analysis
-- `pose`: Pose landmark analysis  
-- `prosody`: Prosodic feature analysis
-
-Each task type gets its own synchronized CSV files and visualizations. 
+# 3) Build dashboards for all sessions
+python adhoc/consolidated_analysis.py --mode visualize
+``` 
