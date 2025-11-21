@@ -1,4 +1,4 @@
-## Counseling-Quality Assessment Pipeline
+P## Counseling-Quality Assessment Pipeline
 
 ### 1. Raw Inputs & Pre-processing
 | Modality | Source File(s) | Key Output CSV | Important Columns | Frame Rate |
@@ -9,7 +9,7 @@
 
 ### 2. Feature Extraction Logic
 #### Facial
-* **AU Statistics** – mean intensity & activation-frequency (`>0.5`).
+* **AU Statistics** – mean intensity & activation-frequency (`>0.5`)
 * **Face Movement** – Δdistance of face-centre per frame.
 * **Landmark Stability** – std of x,y across time.
 
